@@ -68,6 +68,16 @@ test('native token-limit failure cannot save a partial checkpoint', async () => 
   assert.deepEqual(await createCompactionHandler(compact)(f.event, f.ctx), { cancel: true });
 });
 
+test('smaller native reserve-based budgets are never increased, including split-turn calls', async () => {
+  const f = fixture('stop', true);
+  f.event.preparation.settings.reserveTokens = 1024;
+  const result = await createCompactionHandler(compact)(f.event, f.ctx);
+  assert.ok(result.compaction);
+  assert.deepEqual(f.calls.map(call => call.options.maxTokens), [819, 512]);
+  assert.deepEqual(f.calls.map(call => call.payload.max_tokens), [819, 512]);
+  assert.equal(f.event.preparation.settings.reserveTokens, 1024);
+});
+
 for (const split of [false, true]) {
   for (const emptyPart of split ? [1, 2] : [1]) {
     test(`empty generated part cannot be disguised by native metadata (split=${split}, part=${emptyPart})`, async () => {
