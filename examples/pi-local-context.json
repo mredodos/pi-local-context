@@ -1,0 +1,15 @@
+{
+  "targets": [{ "provider": "my-local-provider", "id": "my-qwen-model" }],
+  "compaction": {
+    "enabled": true,
+    "maxTokens": 2048,
+    "deadlineMs": 120000,
+    "maxProtectedChars": 20000,
+    "disableThinking": true
+  },
+  "logs": { "enabled": true },
+  "toolGroups": {
+    "web": ["web_search", "source_check", "fetch_content", "get_search_content"],
+    "workflow": ["workflow", "workflow_control"]
+  }
+}
