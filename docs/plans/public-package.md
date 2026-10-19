@@ -19,3 +19,8 @@ extensions/: thin entries; lib/: validated config and policies; test/: synthetic
 No choice exceeds the simplest portable package. Global-only config avoids project trust/precedence complexity.
 
 ## Residual work (append-only)
+
+- FR-03 / high: Native file metadata could disguise an empty generated summary; resolved by validating every stream result before native assembly, with non-split and both split-part regressions.
+- FR-03 / medium: A smaller reserve-based native output allowance could be raised by the wrapper; resolved by taking the minimum per request, verified at 819/512 tokens with reserve 1024.
+- FR-04 / medium: Missing/truncated structured captures, including text-only native timeout errors, were not positively proven complete; resolved by requiring explicit complete structured output, with an actual agent-loop timeout regression.
+- Code convergence: no remaining implementation gaps after the fixes above. Public URL/ref verification is the subsequent release step.

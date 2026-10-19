@@ -20,7 +20,7 @@ const {AssistantMessageEventStream}=await import('@earendil-works/pi-ai/utils/ev
 const {estimateTokens}=await fromRoot('dist/core/compaction/compaction.js');
 const here=path.dirname(fileURLToPath(import.meta.url));
 
-async function createSession() {
+async function createSession(extraTools = []) {
   const agentDir=fs.mkdtempSync(path.join(os.tmpdir(),'pi-context-sdk-'));
   const previous=process.env.PI_CODING_AGENT_DIR;
   process.env.PI_CODING_AGENT_DIR=agentDir;
@@ -37,7 +37,7 @@ async function createSession() {
   await modelRuntime.setRuntimeApiKey('synthetic-local','synthetic-test-only');
   const model=modelRuntime.getModel('synthetic-local','synthetic-model');
   const trivial={type:'object',properties:{},additionalProperties:false};
-  const customTools=['web_search','source_check','fetch_content','get_search_content','workflow','workflow_control','memory_recall'].map(name=>({name,label:name,description:`Synthetic ${name}`,parameters:trivial,async execute(){return {content:[{type:'text',text:'synthetic result'}],details:{}};}}));
+  const customTools=['web_search','source_check','fetch_content','get_search_content','workflow','workflow_control','memory_recall'].map(name=>({name,label:name,description:`Synthetic ${name}`,parameters:trivial,async execute(){return {content:[{type:'text',text:'synthetic result'}],details:{}};}})).concat(extraTools);
   const {session}=await createAgentSession({cwd:here,agentDir:path.join(here,'unused-test-agent'),modelRuntime,model,thinkingLevel:'medium',resourceLoader,settingsManager,sessionManager:SessionManager.inMemory(here),customTools});
   await session.bindExtensions({});
   return session;
@@ -103,4 +103,29 @@ test('native compaction serialization excludes archived originals and keeps diag
     assert.ok(!text.includes('module_200.ts'));
     assert.ok(!text.includes(LOG_KEY));
   }finally{session.dispose();}
+});
+
+test('actual agent-loop timeout conversion cannot disguise an incomplete native tail as complete', async () => {
+  const source=logFixture()+'\n'+Array.from({length:1200},(_,i)=>`[build] module trailing_${i}.ts: compilation passed; checked 12 declarations and 4 imports; no diagnostics.`).join('\n');
+  const native=createBashToolDefinition(here,{operations:{async exec(_command,_cwd,{onData}){onData(Buffer.from(source));throw new Error('timeout:1');}}});
+  const session=await createSession([native]);
+  let outputPath;
+  try {
+    let requested=false;
+    session.agent.streamFunction=async model=>{
+      const call=!requested;requested=true;
+      const message={role:'assistant',api:model.api,provider:model.provider,model:model.id,content:call?[{type:'toolCall',id:'native-timeout',name:'bash',arguments:{command:'npm run build'}}]:[{type:'text',text:'Timeout observed.'}],stopReason:call?'toolUse':'stop',usage:{input:1,output:1,cacheRead:0,cacheWrite:0,totalTokens:2,cost:{input:0,output:0,cacheRead:0,cacheWrite:0,total:0}},timestamp:Date.now()};
+      const stream=new AssistantMessageEventStream();stream.push({type:'done',reason:message.stopReason,message});stream.end();return stream;
+    };
+    await session.prompt('Run the synthetic timed-out build.');
+    const result=session.sessionManager.getBranch().find(entry=>entry.type==='message'&&entry.message.role==='toolResult'&&entry.message.toolCallId==='native-timeout').message;
+    const text=result.content[0].text;
+    outputPath=text.match(/Full output: ([^\]]+)\]/)?.[1];
+    assert.match(text,/Command timed out after 1 seconds/);
+    assert.match(text,/\[Showing/);
+    assert.ok(!text.includes('E_CACHE_STALE'));
+    assert.equal(result.structuredContent,undefined);
+    assert.equal(result.details[LOG_KEY],undefined);
+    assert.ok(!text.includes('[Selected log:'));
+  } finally {session.dispose();if(outputPath)fs.rmSync(outputPath,{force:true});}
 });

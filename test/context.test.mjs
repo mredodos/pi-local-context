@@ -41,10 +41,10 @@ test('nested calls, file reads, other models and already-selected results are un
 test('native tail truncation uses complete structured output to recover middle diagnostics', () => {
   const e=eventFixture();
   e.content=[{type:'text',text:e.content[0].text.slice(-4000)}];
-  e.details={truncation:{truncated:true},fullOutputPath:'D:/synthetic/build.log'};
+  e.details={truncation:{truncated:true},fullOutputPath:'synthetic/build.log'};
   const result=reduceToolResult(e,{model});
   assert.match(result.content[0].text,/E_CACHE_STALE/);
-  assert.match(result.content[0].text,/D:\/synthetic\/build.log/);
+  assert.match(result.content[0].text,/synthetic\/build.log/);
   assert.equal(result.details.fullOutputPath,e.details.fullOutputPath);
 });
 
@@ -53,6 +53,11 @@ test('native truncation without a complete structured capture stays untouched', 
     const event = { ...eventFixture(), structuredContent, details: { truncation: { truncated: true }, fullOutputPath: 'synthetic-build.log' } };
     assert.equal(reduceToolResult(event, { model }), undefined);
   }
+});
+
+test('text-only shell errors without truncation metadata are never assumed complete', () => {
+  const event = { ...eventFixture(), structuredContent: undefined, details: undefined };
+  assert.equal(reduceToolResult(event, { model }), undefined);
 });
 
 test('original log is recoverable across a compaction and paginated without omissions', () => {
