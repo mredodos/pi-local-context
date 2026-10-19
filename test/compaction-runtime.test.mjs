@@ -67,3 +67,24 @@ test('native token-limit failure cannot save a partial checkpoint', async () => 
   const f = fixture('length');
   assert.deepEqual(await createCompactionHandler(compact)(f.event, f.ctx), { cancel: true });
 });
+
+for (const split of [false, true]) {
+  for (const emptyPart of split ? [1, 2] : [1]) {
+    test(`empty generated part cannot be disguised by native metadata (split=${split}, part=${emptyPart})`, async () => {
+      const f = fixture('stop', split);
+      const originalStream = f.ctx.modelRegistry.streamSimple;
+      let call = 0;
+      f.ctx.modelRegistry.streamSimple = (...args) => {
+        const stream = originalStream(...args);
+        const originalResult = stream.result.bind(stream);
+        const shouldBeEmpty = ++call === emptyPart;
+        stream.result = async () => {
+          const response = await originalResult();
+          return shouldBeEmpty ? { ...response, content: [{ type: 'thinking', thinking: 'No visible summary.' }] } : response;
+        };
+        return stream;
+      };
+      assert.deepEqual(await createCompactionHandler(compact)(f.event, f.ctx), { cancel: true });
+    });
+  }
+}

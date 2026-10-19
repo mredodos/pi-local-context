@@ -48,6 +48,13 @@ test('native tail truncation uses complete structured output to recover middle d
   assert.equal(result.details.fullOutputPath,e.details.fullOutputPath);
 });
 
+test('native truncation without a complete structured capture stays untouched', () => {
+  for (const structuredContent of [undefined, { output: logFixture() }, { truncated: false }]) {
+    const event = { ...eventFixture(), structuredContent, details: { truncation: { truncated: true }, fullOutputPath: 'synthetic-build.log' } };
+    assert.equal(reduceToolResult(event, { model }), undefined);
+  }
+});
+
 test('original log is recoverable across a compaction and paginated without omissions', () => {
   const e=eventFixture(), reduced=reduceToolResult(e,{model});
   const entries=[{type:'message',message:{role:'toolResult',toolCallId:e.toolCallId,...reduced}},{type:'compaction',summary:'synthetic checkpoint'}];
