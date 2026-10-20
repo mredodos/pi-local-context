@@ -1,6 +1,6 @@
 # pi-local-context
 
-Conservative context management for local models in [Pi](https://pi.dev): bounded compaction, recoverable shell logs, and optional tool declarations.
+Conservative context management for local models in [Pi](https://pi.dev): bounded compaction, recoverable shell logs, verification loop protection, and optional tool declarations.
 
 Built for Pi **1.3.0**, Node **22.19+**, with no additional runtime dependencies. Experimental: validate it on your workload before relying on long sessions. Not affiliated with the Pi maintainers.
 
@@ -9,13 +9,14 @@ Built for Pi **1.3.0**, Node **22.19+**, with no additional runtime dependencies
 - **Bounded compaction:** reuse Pi's native compaction algorithm with a separate summary budget and deadline. Preserve cut points, file tracking and original human text. Normal response limits and context settings stay unchanged.
 - **Recoverable logs:** omit long runs of recognized successful build/test rows. Keep diagnostics, unknown lines, neighboring context and exit status. The `context_log` tool retrieves original lines from the session.
 - **Optional tool groups:** declare explicitly configured groups when `context_tools` loads them. Groups remain loaded on the current branch. Tool implementations stay registered and Pi's permission checks still apply.
+- **Verification loop guard:** after two matching mechanical check failures without observed source progress, stop subsequent tools and hand a labelled **BLOCKED** checkpoint to the coordinator. Status reports completed checks; token totals alone never trigger a stop.
 
 This reduces input and summary work. It does not accelerate model decoding, add server slots, replace durable memory, or eliminate every compaction.
 
 ## Install
 
 ```sh
-pi install git:github.com/mredodos/pi-local-context@v0.1.0
+pi install git:github.com/mredodos/pi-local-context@v0.2.0
 ```
 
 Run `/reload` in existing Pi sessions. A pinned tag stays pinned when packages update. Package installation and resource selection follow [Pi's package documentation](https://pi.dev/docs/latest/packages).
@@ -35,13 +36,14 @@ For a Qwen-compatible local server using Pi's `openai-completions` adapter:
     "disableThinking": true
   },
   "logs": { "enabled": true },
+  "loopGuard": { "enabled": true },
   "toolGroups": {}
 }
 ```
 
 Replace `provider` and `id` with the **exact identifiers in your Pi model configuration**; display names and wildcards do not match. Then `/reload`. `disableThinking: true` adds `chat_template_kwargs.enable_thinking=false` only to summary requests; use it only when your server/template supports that option. It defaults to `false`. Summary generation requests Pi's `off` thinking level either way; backend behavior varies.
 
-To use only log reduction, omit `compaction`; it is disabled by default. To use only compaction, set `logs.enabled` to `false`. Invalid JSON/options disable the affected extension at load and show a session-start error.
+To use only log reduction, omit `compaction` and `loopGuard`; both are disabled by default. To use only the guard, set `logs.enabled` to `false` and omit `compaction`. Invalid JSON/options disable the affected extension at load and show a session-start error.
 
 ### Configuration
 
@@ -54,9 +56,31 @@ To use only log reduction, omit `compaction`; it is disabled by default. To use 
 | `compaction.maxProtectedChars` | `20000` | Integer 1000–50000; original human text budget |
 | `compaction.disableThinking` | `false` | Explicit Qwen-compatible template override |
 | `logs.enabled` | `true` | Boolean; still requires a target match |
+| `loopGuard.enabled` | `false` | Boolean; exact target still required |
+| `loopGuard.verificationTools` | `[]` | Up to 50 extra direct tool names whose errors are verification failures |
 | `toolGroups` | `{}` | Up to 20 named groups, each 1–100 optional tool names |
 
-There is no regex/wildcard targeting. Configuration is read at extension load; use `/reload` after edits. Both features can be selected separately with Pi's package resource filters. Avoid loading another copy of these policies at the same time.
+There is no regex/wildcard targeting. Configuration is read at extension load; use `/reload` after edits. Entry points can be selected separately with Pi's package resource filters. Avoid loading another copy of these policies at the same time.
+
+### Verification guard and workflow children
+
+`/context-guard` shows the last completed check, last successful check and current checkpoint. The model can read the same information with `context_guard`. After a block, inspect the diagnostic and use `/context-guard reset` to begin a new phase. Ordinary messages do not reset it: automatic SDK repair prompts can look like interactive input. Changed bytes in a witnessed source file permit resumption before the next prompt; reads, identical rewrites and recognized generated reports do not count as progress.
+
+Pi workflow children do not inherit all host extensions. With **pi-dynamic-workflows 3.14.0**, merge this entry into its global settings at `~/.pi/workflows/settings.json` (Windows: `%USERPROFILE%\.pi\workflows\settings.json`):
+
+```json
+{ "providerMiddlewareExtensions": ["loop-guard"] }
+```
+
+Preserve any existing entries and settings. Project workflow settings can override the global allowlist; merge the entry there too when used. The allowlist uses the extension filename without `.ts`; a manually installed stub with another name must use that name instead. Only this child-safe entry is needed for the guard. Reload the host before creating new children; already running children keep their old extensions.
+
+Unstructured children return a terminal BLOCKED checkpoint. Structured children fail schema compliance instead of inventing a passing result. The parent guard annotates the workflow result and blocks automatic subsequent tool calls. An arbitrary JavaScript workflow scheduler can still continue its own script after a child returns: callers must treat a BLOCKED result as a failed phase, not successful verification.
+
+Recognition covers direct common npm/pnpm/yarn/bun checks, node verification scripts/`--test`, pytest/Python verification scripts, Cargo, Go, .NET, CMake builds, make/ninja and tsc, plus explicit `verificationTools`. It is intentionally not a full shell parser: wrapped commands, custom runners and semantic browser judgments may need an explicit tool integration. Only actual tool errors/nonzero structured exit codes count; successful repetitive loops are outside scope.
+
+Failure identity uses the complete observed capture, with only ANSI, timestamps and durations normalized; incomplete captures or outputs over 65,536 characters cannot prove a matching failure. Changes to other output can therefore prevent matching. Archived originals from this package's log reduction remain usable. Source witnesses cover directly referenced script and diagnostic paths inside the workspace: at most 32 files, 256 KiB per file and 1 MiB total. Unknown dependencies or changes made outside the observed paths can require explicit reset. Generated-path recognition is heuristic. No project files are changed by observation; source contents are never copied into a checkpoint.
+
+The guard cannot interrupt work Pi has already accepted, including a parallel batch, and is not a wall-clock watchdog. The next assistant response is replaced locally with the checkpoint before its tools execute. On `openai-completions`, only continuations while blocked receive a one-token output ceiling; ordinary limits remain unchanged. Other APIs retain their ordinary continuation ceiling. Waiting for that response can still include server queue time; native provider retries and structured-schema repair can add bounded attempts and retain the block. Checkpoint excerpts have bounded common credential redaction; original tool results remain in the existing session and are not sanitized by this feature.
 
 ### Optional tool groups
 
@@ -85,7 +109,7 @@ The model calls `context_tools({"group":"web"})` or `{"group":"all"}`. Declarati
 Remove with:
 
 ```sh
-pi remove git:github.com/mredodos/pi-local-context@v0.1.0
+pi remove git:github.com/mredodos/pi-local-context@v0.2.0
 ```
 
 Then `/reload`. Existing selected logs remain in history with their originals in details; reinstalling re-enables recovery. Removing a package does not rewrite prior session entries.

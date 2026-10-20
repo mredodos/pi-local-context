@@ -24,7 +24,7 @@ async function withPackage(input, check) {
     assert.deepEqual(fs.readdirSync(agentDir), input === undefined ? [] : ['pi-local-context.json']);
     const result = loader.getExtensions();
     assert.deepEqual(result.errors, []);
-    assert.equal(result.extensions.length, 2);
+    assert.equal(result.extensions.length, 3);
     await check(result.extensions);
   } finally {
     if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
@@ -33,7 +33,7 @@ async function withPackage(input, check) {
   }
 }
 
-test('the actual Pi package manifest discovers both entries with no configuration', async () => {
+test('the actual Pi package manifest discovers all entries with no configuration', async () => {
   await withPackage(undefined, async extensions => {
     const compaction = extensions.find(extension => extension.handlers.has('session_before_compact'));
     assert.ok(compaction);
@@ -56,7 +56,7 @@ test('the package loads configured helpers and rejects invalid config with sessi
       assert.equal(extension.handlers.has('session_before_compact'), false);
       await extension.handlers.get('session_start')[0]({}, { ui: { notify: (...args) => notices.push(args) } });
     }
-    assert.equal(notices.length, 2);
+    assert.equal(notices.length, 3);
     assert.ok(notices.every(([message, level]) => message.includes('not valid JSON') && level === 'error'));
   });
 });

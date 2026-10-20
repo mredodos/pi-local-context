@@ -23,3 +23,9 @@ Tests: pure state conservation plus actual Pi and WorkflowAgent loops; no applic
 6. Publish focused PR, update shared notes and hand over reload instruction.
 
 ## Residual work (append-only)
+- Review round 1: SDK automatic input reset allowed fabricated structured success and automatic coordinator continuation. Resolved by explicit-command/source-change reset; native WorkflowAgent schema failure and coordinator tests added.
+- Review round 1: Workflow handoff dropped original output, path parsing missed spaces/.h, root reports could simulate progress, command flags were not redacted, and quoted arguments could look like shell commands. Each corrected with regression coverage.
+- Review round 1: Pi accepts parallel batches before execution. Scope clarified to subsequent calls; a four-check synthetic batch proves accepted work finishes and later writes remain blocked. No global scheduling change.
+- Review round 2: Keyword-only fingerprints merged different TAP actual/expected values and dropped stack source paths. Full bounded capture signatures/source parsing replace them; incomplete/oversized captures cannot prove matching. Falsy structured values preserved.
+- Review round 2: Native provider retry bypassed the first checkpoint delivery. Every assistant response while blocked now retains the checkpoint and continuation cap; a real SDK retry regression covers 503 then fabricated pass.
+- Final clean-context review: all reported reproductions resolved, 29/29 focused synthetic tests; no concrete residual gap in the reviewed snapshot. Full suite subsequently passes 71/71 on Linux and native Windows. Local stub/child allowlist probe passes with two failed checks, zero subsequent writes and BLOCKED handoff.
