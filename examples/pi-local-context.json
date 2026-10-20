@@ -8,6 +8,7 @@
     "disableThinking": true
   },
   "logs": { "enabled": true },
+  "loopGuard": { "enabled": true },
   "toolGroups": {
     "web": ["web_search", "source_check", "fetch_content", "get_search_content"],
     "workflow": ["workflow", "workflow_control"]
